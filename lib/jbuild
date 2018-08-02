@@ -1,0 +1,7 @@
+(jbuild_version 1)
+
+
+(library
+ ((name balancer)
+  (libraries  (mirage-flow-lwt cstruct hex) )
+  (synopsis "A client side loadbalancing library")))

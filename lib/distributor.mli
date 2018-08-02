@@ -1,0 +1,39 @@
+open State 
+
+module type S = sig
+
+  type param
+  type state
+
+  type peer
+         
+         
+  val pick: state -> param -> peer Lwt.t 
+  val use: state -> param -> (Node.t -> 'a Lwt.t) -> 'a Lwt.t
+                                                        
+end
+
+
+module type Fanout = sig
+  val fanout: int
+end
+
+module type Checksum = sig
+  val sum64: Cstruct.t -> int64 
+end 
+
+
+module P2C: S with type param = unit and type state = loaded_nodes and type peer = LoadedNode.t
+
+
+                                                                         
+module CHash:
+functor(C: Checksum) -> S with type param = Cstruct.t and type state = nodes and type peer = Node.t 
+
+                                                                                               
+module CHashLeastLoaded:
+functor (C: Checksum) (F: Fanout) -> S with type param = Cstruct.t and type state = loaded_nodes and type peer = LoadedNode.t
+
+                                                                                          
+module RoundRobin: S with type param = unit and type state = rr_queue and type peer = Node.t
+                                                                                        
