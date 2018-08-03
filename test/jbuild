@@ -2,7 +2,7 @@
 
 (executable
  ((name balancers_test)
- (libraries  (alcotest-lwt balancers) ))
+ (libraries  (alcotest-lwt balancer) ))
 )
 
 

@@ -3,5 +3,6 @@
 
 (library
  ((name balancer)
-  (libraries  (mirage-flow-lwt cstruct hex) )
+  (public_name balancer)
+  (libraries  (str mirage-flow-lwt cstruct hex react) )
   (synopsis "A client side loadbalancing library")))
