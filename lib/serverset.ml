@@ -1,92 +1,27 @@
 
 open Lwt.Infix
+open Util
 
 
-module SyncVar = struct
-  type 'a t = { lock: Lwt_mutex.t; mutable value: 'a}
-
-  
-                                     
-  let synchronized t f =
-    Lwt_mutex.with_lock t.lock f
-
-  let become t v1 =
-    Lwt_mutex.with_lock t.lock (
-      fun () -> 
-      t.value <- v1;
-      Lwt.return_unit
-    )
-
-  let update t ufn =
-
-    
-    Lwt_mutex.with_lock t.lock (
-      fun () ->
-
-      let v1 = ufn t.value in
-      t.value <- v1;
-      Lwt.return v1
-   )
-
-  let get_lock t = t.lock
-
-  let value t = t.value
-
-  let make value =
-    let lock = Lwt_mutex.create () in 
-    {lock; value}
-
-
-
-  module Infix = struct
-    let (>>|) t f =
-      synchronized t f
-
-    let (<<<) t v1 =
-      become t v1
-
-    let (>>>) t f =
-      update t f
-   
-    let (!) t =
-      t.value          
-  end 
-
-
-                   
-               
-end
-
-
-
-
-
-                         
 module LoadedNode = struct
-
-  type t = {node: Node.t; mutable load: int64}
-
-  let incr t =
-    t.load <- Int64.succ t.load
-
-  let decr t =
-    t.load <- Int64.pred t.load
-
-  let compare l r =
-    Node.compare l.node r.node
-
-  let make node load =
-    {node; load}
+  type t = {node: Node.t; load: Counter64.t}
+             
+  let node t = t.node
+  let load t = Counter64.get t.load
 
   let of_node node =
-    let load = 0L in {node; load}
-                       
-  let node t = t.node
-                 
+    let load = Counter64.zero () in
+    {node; load}
 
+  let make node i =
+    let load = Counter64.create i in
+    {node; load}
+
+  let compare l r = Node.compare l.node r.node
+
+                                 
+                             
 end
-                      
-
 
                       
 module NodeSet = Set.Make(Node) 
@@ -107,20 +42,20 @@ end
 type loaded_nodes = LoadedSet.t SyncVar.t
 
 module LoadedNodes = struct
-  open SyncVar.Infix
-
       
   type t = LoadedSet.t SyncVar.t
 
-  let of_list x = LoadedSet.of_list x |> SyncVar.make
+  let of_list x = LoadedSet.of_list x |> SyncVar.create
                               
   let of_nodes x =
-    List.map (fun n -> LoadedNode.of_node n) x |> LoadedSet.of_list |> SyncVar.make
+    List.map (fun n -> LoadedNode.of_node n) x |> LoadedSet.of_list |> SyncVar.create
 
   let to_nodes ls =
     let elements = LoadedSet.elements ls in
     List.fold_left (fun acc x -> LoadedSet.add x acc) LoadedSet.empty elements 
-                       
+
+
+
 (**
   let update t nodes =
     let e =
@@ -150,8 +85,14 @@ module RRQueue = struct
   let of_nodes nodes =
     let q = Queue.create () in
     List.iter (fun x -> Queue.add x q) nodes;
-    SyncVar.make q
+    SyncVar.create q
 
+  let take t =
+    SyncVar.sync_effect t (fun q -> Queue.take q |> Lwt.return )
+    
+
+  let add t n =
+    SyncVar.sync_effect t (fun q -> Queue.add n q |> Lwt.return )
                    
 end
 

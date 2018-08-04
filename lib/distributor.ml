@@ -1,7 +1,7 @@
 open Serverset
-open Serverset.SyncVar.Infix
 open Lwt.Infix
        
+open Util
        
 
 module type S = sig
@@ -40,16 +40,22 @@ module P2C = struct
                  
 
 
-  open LoadedNode
+
+  open LoadedNode              
          
               
                  
 (* Think about adding nth *)
   let pick state () =
-    let elements = (! state) |> LoadedSet.elements in 
+    
+
+
+    SyncVar.read state >>= fun set ->
+    let elements = LoadedSet.elements set in 
+   
 
     let select () =
-      Random.int ( LoadedSet.cardinal (! state) )
+      Random.int ( List.length elements )
       |> fun i -> List.nth elements i
     in
     
@@ -65,19 +71,18 @@ module P2C = struct
       
         
 
+                 
 
-  let use state () f =
-    pick state () >>= fun n ->  
-    state >>| fun () ->
+  let use t () f =
+    pick t () >>= fun n ->  
+    Counter64.incr n.load;     
 
-    incr n;
-    f n.node >|= fun out ->
-    decr n;
-    
-    out
-      
-              
-    
+    Util.ensure (f n.node) ( fun () ->
+      Counter64.decr n.load; 
+      ()
+    )             
+
+                
 end
                
 
@@ -90,18 +95,17 @@ module RoundRobin = struct
                 
 
   let pick state () =
-    state >>| fun () ->
-    ! state |> Queue.take |> Lwt.return
+    RRQueue.take state 
 
 
                                
   let use state () f =
     pick state () >>= fun node ->
-    f node >>= fun out ->
 
-    state >>| fun () ->
-    (! state) |> Queue.add node; 
-    Lwt.return out
+    Util.ensure (f node) (fun () ->
+      RRQueue.add state node;
+      ()
+    )
     
 
     
@@ -121,7 +125,8 @@ module CHash (C: Checksum) = struct
                 
 
   let pick state key =
-    let nodes = (! state) |> NodeSet.elements in
+    SyncVar.read state >>= fun s ->
+    let nodes = NodeSet.elements s in
     Chash.shard nodes (C.sum64 key) |> Lwt.return 
 
   let use state key f =
@@ -140,16 +145,18 @@ end
                                
 
 module CHashLeastLoaded (C: Checksum) (F: Fanout) = struct
-  open LoadedNode
+         
          
 
   type param = Cstruct.t
-  type state = loaded_nodes
+  type state = LoadedNodes.t
   type peer = LoadedNode.t
 
 
+  open LoadedNode
+         
   let min nodes =
-    
+
     let rec aux hosts m =
       match hosts with
 
@@ -170,10 +177,13 @@ module CHashLeastLoaded (C: Checksum) (F: Fanout) = struct
 
   let pick state key =
 
+
+    SyncVar.read state >>= fun s -> 
+
     let nodes =
-      let a = LoadedSet.elements (! state) in
+      let a = LoadedSet.elements s in
       Chash.shards a (C.sum64 key) F.fanout
-    in
+    in 
 
     let n = min nodes in
     Lwt.return n
@@ -182,17 +192,13 @@ module CHashLeastLoaded (C: Checksum) (F: Fanout) = struct
 
                
   let use state key f =
-    pick state key >>= fun ln ->
-    
+    pick state key >>= fun n ->
+    Counter64.incr n.load ;
 
-
-    state >>| fun () ->
-
-    incr ln; 
-    f ln.node >>= fun out ->
-    decr ln;
-    
-    Lwt.return out 
+    ensure (f n.node) (fun () ->
+      Counter64.decr n.load;
+      ()                 
+    )
     
                 
 end 
