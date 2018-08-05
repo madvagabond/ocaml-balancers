@@ -28,12 +28,14 @@ module P2C: S with type param = unit and type state = LoadedNodes.t and type pee
 
                                                                          
 module CHash:
-functor(C: Checksum) -> S with type param = Cstruct.t and type state = nodes and type peer = Node.t 
+functor(C: Checksum) -> S with type param = Cstruct.t and type state = Nodes.t and type peer = Node.t 
 
                                                                                                
 module CHashLeastLoaded:
 functor (C: Checksum) (F: Fanout) -> S with type param = Cstruct.t and type state = LoadedNodes.t and type peer = LoadedNode.t
 
                                                                                           
-module RoundRobin: S with type param = unit and type state = rr_queue and type peer = Node.t
-                                                                                        
+module RoundRobin: S with type param = unit and type state = RRQueue.t and type peer = Node.t
+
+module P2C_PKG:
+functor (C1: Checksum) (C2: Checksum) -> S with type param = Cstruct.t and type state = LoadedNodes.t and type peer = LoadedNode.t

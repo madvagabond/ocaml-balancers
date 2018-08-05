@@ -23,31 +23,44 @@ module LoadedNode = struct
                              
 end
 
-                      
+
+
 module NodeSet = Set.Make(Node) 
 module LoadedSet = Set.Make(LoadedNode)
 
-
+(** Maintains information to perform balancing decisions and membership *)
 module type S = sig
+  type elt 
   type t 
 
-  val update: t -> NodeSet.t -> t
-  val resolve: t -> NodeSet.t React.S.t -> t
-  val of_nodes: Node.t list -> t
+  (** A function to maintain server set retrieved from an external source*)
+  val update: t -> NodeSet.t -> elt Lwt.t 
+
+  (** Use a reference cell to maintain the ServerSet using update when an event is triggered*)
+  val from_src: t -> NodeSet.t React.S.t -> t
+  val from_nodes: Node.t list -> t
+
+
+
+
+  val add_node: t -> Node.t -> elt Lwt.t 
+  val rm_node: t -> Node.t -> elt Lwt.t
+
                                  
 end
 
                   
                            
-type loaded_nodes = LoadedSet.t SyncVar.t
 
-module LoadedNodes = struct
+
+module LoadedNodes  = struct
+  type elt = LoadedSet.t 
       
   type t = LoadedSet.t SyncVar.t
 
   let of_list x = LoadedSet.of_list x |> SyncVar.create
                               
-  let of_nodes x =
+  let from_nodes x =
     List.map (fun n -> LoadedNode.of_node n) x |> LoadedSet.of_list |> SyncVar.create
 
   let to_nodes ls =
@@ -56,45 +69,156 @@ module LoadedNodes = struct
 
 
 
-(**
-  let update t nodes =
-    let e =
-      LoadedSet.elements (! t)
-      |> fun (fun y ->  (fun x -> to_nodes) )  in
-      
-    let rm_set = LoadedSet.diff !t nodes in
-   
-    let add_set = LoadedSet.diff nodes !t in
 
-    t >>> fun st ->
-    let v1 =
-      let v = LoadedSet.filter (fun x -> (LoadedSet.mem x rm_set) <> true) st in
-      LoadedSet.union nodes add_set
+  let update t nodes =
+    let nodes0 =
+      NodeSet.elements nodes |> List.map (fun n -> LoadedNode.of_node n)  |> LoadedSet.of_list
     in
     
-   **) 
+    let f s =                   
+      let e = to_nodes s in
+      
+      let rm_set = LoadedSet.diff s nodes0 in
+      let add_set = LoadedSet.diff nodes0 s in
+      
+
+      let v = LoadedSet.filter (fun x -> (LoadedSet.mem x rm_set) <> true) s in
+      LoadedSet.union v add_set
+    in
+    
+    SyncVar.update t f 
+
+           
+  let from_src t src =
+    let e = React.S.changes src in
+    React.E.map (fun nodes -> update t nodes ) e;
+    t
+
+      
+ 
+  let add t node =
+    let ln = LoadedNode.of_node node in
+    SyncVar.update t (LoadedSet.add ln)
+
+  let rm t node =
+    let ln = LoadedNode.of_node node in
+    SyncVar.update t (LoadedSet.remove ln)
+
+end
+
+
+                       
+
+module Nodes = struct
+  type elt = NodeSet.t
+  type t = NodeSet.t SyncVar.t
+
+  let from_nodes l = NodeSet.of_list l |> SyncVar.create 
+
+  let update t x =
+    SyncVar.become t x >|= fun () -> t 
+
+  let from_src t src =
+    let e = React.S.changes src in
+    React.E.map (fun nodes -> update t nodes ) e;
+    t
+
+
+
+  let add_node t node =
+    SyncVar.update t (NodeSet.add node)
+
+  let rm_node t node =
+    SyncVar.update t (NodeSet.remove node)
     
 end
 
-type nodes = NodeSet.t SyncVar.t
-                       
-type rr_queue = (Node.t Queue.t) SyncVar.t
+
+
+
+
+                 
 
 module RRQueue = struct
 
-  let of_nodes nodes =
-    let q = Queue.create () in
-    List.iter (fun x -> Queue.add x q) nodes;
-    SyncVar.create q
+  type elt = {queue: Node.t Queue.t; mutable nodes: NodeSet.t}
+  type t = elt SyncVar.t
 
+  open SyncVar
+         
+
+
+  (*
+  let get_nodes t = read t |> (fun x -> x.nodes)
+  let get_queue t = read t |> (fun x -> x.queue) 
+              
+  *)              
+  let from_nodes hosts =
+
+    let nodes = NodeSet.of_list hosts in 
+    let queue = Queue.create () in
+    
+    List.iter (fun x -> Queue.add x queue) hosts;
+    SyncVar.create {queue; nodes}
+
+                   
   let take t =
-    SyncVar.sync_effect t (fun q -> Queue.take q |> Lwt.return )
+    SyncVar.sync t (fun () ->
+        let q = t.value.queue in 
+        Queue.take q |> Lwt.return
+      )
     
 
   let add t n =
-    SyncVar.sync_effect t (fun q -> Queue.add n q |> Lwt.return )
-                   
+    SyncVar.sync t (fun () ->
+
+        let (nodes, q) =
+          let s = SyncVar.value t in
+          s.nodes, s.queue
+        in
+        
+        
+        if (NodeSet.mem n nodes) then 
+          Queue.add n q |> Lwt.return
+
+        else
+          Lwt.return_unit 
+      )
+
+                 
+  let update t x =
+
+    sync t (
+        fun () ->
+        t.value.nodes <- x;
+        Lwt.return t.value
+      )
+
+         
+  let from_src t src =
+    let e = React.S.changes src in    
+    React.E.map (update t) e;
+    t
+                
+
+  let add_node t node =
+    sync t (fun () ->
+        let v = t.value in
+        v.nodes <- NodeSet.add node t.value.nodes;
+        Lwt.return v                      
+    )
+
+
+  let rm_node t node =
+    sync t (fun () ->
+        let v = t.value in
+        v.nodes <- NodeSet.remove node t.value.nodes;
+        Lwt.return v                      
+    )
+
 end
 
                   
             
+
+

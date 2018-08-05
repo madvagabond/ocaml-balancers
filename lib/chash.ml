@@ -15,13 +15,13 @@ let rec jmp_hash j n key =
   else
     jmp_hash j' n key
 
-             
+
              
 let host ~hosts key =
   Int64.to_int (jmp_hash 0L hosts key)
 
                
-let shard t key =
+let lookup t key =
   (*let key = Cstruct.BE.get_uint64 digest 0 in  *)
   let hosts = List.length t in 
 
@@ -30,8 +30,9 @@ let shard t key =
 
 
 let rec range i j = if i > j then [] else i :: (range (i+1) j)
-                                                 
+let range_rev j i = range i j |> List.rev                                                 
 
+                                   
 
                                                  
 let slice t succ f =
@@ -50,7 +51,7 @@ let slice t succ f =
   in
 
 
-  let shards =
+  let successors =
     if max <= last then (range succ max)
 
     else
@@ -59,8 +60,13 @@ let slice t succ f =
 
   in
 
-  List.map (fun x -> List.nth t x) shards 
+  List.fold_left (fun acc x ->
+    try ( acc @ [ (List.nth t x) ] ) 
+    with _ -> acc
+  ) [] successors
 
+
+                 
                             
       
     

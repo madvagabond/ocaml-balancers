@@ -5,7 +5,7 @@ module type INT = sig
   val pred: t -> t
   val zero: t
               
-end 
+end
 
 
 module type COUNTER = sig
@@ -121,9 +121,6 @@ module SyncVar = struct
   let sync t f =
     Lwt_mutex.with_lock t.lock f
 
-  let sync_effect t f =
-    Lwt_mutex.with_lock t.lock (fun () -> f t.value) 
-
                         
   let update t ufn =
     Lwt_mutex.with_lock t.lock ( fun () ->
@@ -131,6 +128,9 @@ module SyncVar = struct
       t.value <- v1;
       Lwt.return v1 
     )
+
+
+  let value t = t.value
 
                         
 end

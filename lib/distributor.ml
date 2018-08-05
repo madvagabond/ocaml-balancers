@@ -32,7 +32,7 @@ end
 
 module P2C = struct
 
-  type state = loaded_nodes
+  type state = LoadedNodes.t
   type param = unit
 
   type peer = LoadedNode.t
@@ -89,7 +89,7 @@ end
 
 module RoundRobin = struct
 
-  type state = rr_queue
+  type state = RRQueue.t
   type param = unit
   type peer = Node.t
                 
@@ -119,7 +119,7 @@ end
 module CHash (C: Checksum) = struct
 
   type param = Cstruct.t
-  type state = nodes
+  type state = Nodes.t
                  
   type peer = Node.t
                 
@@ -127,7 +127,7 @@ module CHash (C: Checksum) = struct
   let pick state key =
     SyncVar.read state >>= fun s ->
     let nodes = NodeSet.elements s in
-    Chash.shard nodes (C.sum64 key) |> Lwt.return 
+    Chash.lookup nodes (C.sum64 key) |> Lwt.return 
 
   let use state key f =
     pick state key >>= fun node ->
@@ -205,3 +205,41 @@ end
 
 
                                                       
+module P2C_PKG (C1: Checksum) (C2: Checksum) = struct
+
+  type param = Cstruct.t
+  type state = LoadedNodes.t
+  type peer = LoadedNode.t
+
+
+  let lookup e hf key =
+    let size = List.length e in
+    let a = Int64.to_int (hf key) in
+    a mod size |> List.nth e  
+                
+  let pick t key =
+    SyncVar.read t >>= fun x ->
+
+    let e = LoadedSet.elements x in
+
+    let (a, b) =
+      ( lookup e C1.sum64 key), ( lookup e C2.sum64 key)
+    in
+
+    if a.load <= b.load then
+      Lwt.return a
+    else
+      Lwt.return b
+
+
+  let use state key f =
+    pick state key >>= fun n ->
+    Counter64.incr n.load ;
+
+    ensure (f n.node) (fun () ->
+        Counter64.decr n.load;
+        ()                 
+      )
+           
+                              
+end

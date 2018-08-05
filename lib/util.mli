@@ -38,13 +38,19 @@ module Counter64: COUNTER with type elt = int64
 
                                             
 
-(** Thread safe mutable safe that provides the gaurentees of a Multi Reader single Writer RW mutex, it handles locking and unlocking on it's own so you don't have to touch the mutex *)         
+(** Thread safe mutable that provides the gaurentees of a Multi Reader single Writer RW mutex, it handles locking and unlocking on it's own so you don't have to touch the mutex *)         
 module SyncVar: sig
   type 'a t = { lock: Lwt_mutex.t; mutable value: 'a}
 
 
   (** Aquires a read lock and returns data *)
   val read: 'a t -> 'a Lwt.t
+
+
+
+  (** Reads the inner value without a read lock for use in update and sync effect *)
+  val value: 'a t -> 'a
+                       
                        
   val create: 'a -> 'a t
 
@@ -53,10 +59,7 @@ module SyncVar: sig
 
   (** Acquires write lock and applies f to it's contents*)
   val update: 'a t -> ('a -> 'a) -> 'a Lwt.t
-
-
-  (** For use with mutable data structures like arrays and queues *)
-  val sync_effect: 'a t -> ('a -> 'b Lwt.t) -> 'b Lwt.t                                     
+                     
   val sync: 'a t -> (unit -> 'b Lwt.t) -> 'b Lwt.t
                                            
                                            
