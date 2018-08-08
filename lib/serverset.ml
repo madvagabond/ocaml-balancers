@@ -38,7 +38,7 @@ module type S = sig
 
   (** Use a reference cell to maintain the ServerSet using update when an event is triggered*)
   val from_src: t -> NodeSet.t React.S.t -> t
-  val from_nodes: Node.t list -> t
+  val of_nodes: Node.t list -> t
 
 
 
@@ -63,7 +63,7 @@ module LoadedNodes  = struct
 
   let of_list x = LoadedSet.of_list x |> SyncVar.create
                               
-  let from_nodes x =
+  let of_nodes x =
     List.map (fun n -> LoadedNode.of_node n) x |> LoadedSet.of_list |> SyncVar.create
 
   let to_nodes ls =
@@ -119,7 +119,7 @@ module Nodes = struct
   type elt = NodeSet.t
   type t = NodeSet.t SyncVar.t
 
-  let from_nodes l = NodeSet.of_list l |> SyncVar.create 
+  let of_nodes l = NodeSet.of_list l |> SyncVar.create 
 
   let update t x =
     SyncVar.become t x >|= fun () -> x
@@ -162,7 +162,7 @@ module RRQueue = struct
   let get_queue t = read t |> (fun x -> x.queue) 
               
   *)              
-  let from_nodes hosts =
+  let of_nodes hosts =
 
     let nodes = NodeSet.of_list hosts in 
     let queue = Queue.create () in

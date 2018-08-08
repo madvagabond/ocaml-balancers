@@ -112,7 +112,7 @@ let test_rr switch () =
   let peers = make_nodes 5 in
   let expected = List.hd peers in
 
-  let ss = RRQueue.from_nodes peers in 
+  let ss = RRQueue.of_nodes peers in 
   RoundRobin.pick ss () >>= fun got -> 
   Alcotest.check node "Nodes didn't match" expected got;
 
@@ -199,7 +199,7 @@ open Alcotest
        
 let test_serverset (type a) (module SS: Serverset.S with type elt = a) s () =
   let t =
-    range 3000 3005 |> List.map (fun x -> make_node x) |> SS.from_nodes
+    range 3000 3005 |> List.map (fun x -> make_node x) |> SS.of_nodes
   in
 
 
@@ -226,10 +226,10 @@ let test_serverset (type a) (module SS: Serverset.S with type elt = a) s () =
   
   let got2 =
     let s = get_set () in
-    NodeSet.subset s1 s
+    NodeSet.equal s1 s
   in
 
-  Alcotest.check bool "is subset" true got2
+  Alcotest.check bool "sets are equal" true got2
   
   
   
