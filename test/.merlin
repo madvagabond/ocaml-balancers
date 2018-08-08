@@ -16,10 +16,6 @@ PKG logs
 PKG lwt
 PKG lwt.log
 PKG lwt.unix
-PKG mirage-clock
-PKG mirage-device
-PKG mirage-flow
-PKG mirage-flow-lwt
 PKG react
 PKG result
 PKG sexplib

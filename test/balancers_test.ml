@@ -3,10 +3,12 @@ open Lwt.Infix
        
 
 open Serverset
-open Distributor
+open Util
        
-module CH = Balancer.Chash
-
+module CH = Chash
+              
+let rec range i j = if i > j then [] else i :: (range (i+1) j)
+                                                 
 let string_m =
   let open Alcotest in list string 
 
@@ -17,6 +19,7 @@ let make_node port =
 
 let make_loaded port i =
   make_node port |> (fun n -> LoadedNode.make n i)
+
 
 
 let node =
@@ -30,7 +33,10 @@ let loaded_node =
   let eq l r = LoadedNode.compare l r = 0 in
   Alcotest.testable pp eq
 
+let node_list x =
+  let open Alcotest in list node
 
+                            
 let free () = Lwt.return_unit
                 
 let use_switch switch =
@@ -76,8 +82,6 @@ let make_nodes n =
 let test_p2c switch () =
   use_switch switch;
   
-  let host = "127.0.0.1" in
-  
   let (v1, v2) = (make_loaded 4000 0L), (make_loaded 4001 1L) in
   
   let srv =  LoadedNodes.of_list [v1; v2] in 
@@ -108,7 +112,7 @@ let test_rr switch () =
   let peers = make_nodes 5 in
   let expected = List.hd peers in
 
-  let ss = RRQueue.of_nodes peers in 
+  let ss = RRQueue.from_nodes peers in 
   RoundRobin.pick ss () >>= fun got -> 
   Alcotest.check node "Nodes didn't match" expected got;
 
@@ -117,16 +121,155 @@ let test_rr switch () =
   RoundRobin.pick ss () >|= fun got -> 
   
   Alcotest.check node "Doesn't exibit FIFO properties" expect_n got
-             
-   
- 
+
+
+
+                
+
+let test_counter s () =
+  let ctr = Util.Counter64.zero () in
+  let l = [1; 2; 3; 4;] in
+  
+  let expected = 4L in
+  
+  Lwt_list.iter_p (fun _ ->
+      Util.Counter64.incr ctr;
+      Lwt.return_unit
+    ) l >>= fun () ->
+
+  let got = Counter64.get ctr in
+
+  Alcotest.check
+    Alcotest.int64
+    "counter isn't equal to expected result"
+    expected
+    got
+  |> Lwt.return
+
+
+
+
+
+let timeout delay t =
+  let tmout =
+    Lwt_unix.sleep delay >|= fun () ->
+    print_endline "triggered"
+  in
+
+  Lwt.pick [
+      (tmout >|= fun () -> true);
+      (t >|= fun v -> false);
+    ]
+
+
+           
+let test_syncvar s () =
+  let open SyncVar in
+
+  let var = SyncVar.create "homie" in 
+
+
+  let s () =
+    sync var (fun () -> print_endline "hoe" |> Lwt.return)
+  in
+
+  let v () = read var >>= fun _ -> Lwt.return_unit in
+    
+  
+  
+  let tasks = [s; s; s; s; v;] in
+
+  Lwt_list.iter_p (fun f -> f () ) tasks >>= fun _ -> 
+
+  
+  update var (fun x -> "wass good " ^ x) >>= fun e ->
+  read var >>= fun g ->
+
+  Alcotest.check Alcotest.string "update wasn't seen" e g;
+
+  let exp = "hello friend" in 
+  become var exp >>= fun () ->
+  read var >|= fun got1 -> 
+  
+  Alcotest.check Alcotest.string "State change wasn't seen" exp got1           
+           
+open Serverset
+open Alcotest
+       
+       
+let test_serverset (type a) (module SS: Serverset.S with type elt = a) s () =
+  let t =
+    range 3000 3005 |> List.map (fun x -> make_node x) |> SS.from_nodes
+  in
+
+
+  let get_set () =
+    Lwt_main.run ( SS.nodes t >|= fun x ->  ( NodeSet.of_list x) )
+  in
+  
+  SS.add_node t (make_node 3006) >>= fun _ ->
+  let got = NodeSet.mem (make_node 3006) ( get_set () ) in
+
+  Alcotest.check bool "node is in set" true got;
+
+  let n = make_node 3006 in
+  SS.rm_node t n >>= fun _ ->
+
+  let got1 = NodeSet.mem n (get_set ()) in
+  Alcotest.check bool "node is not in set" false got1;
+
+  let s1 =
+    range 3007 3010 |> List.map (fun x -> make_node x) |> NodeSet.of_list
+  in
+
+  SS.update t s1 >|= fun _ ->
+  
+  let got2 =
+    let s = get_set () in
+    NodeSet.subset s1 s
+  in
+
+  Alcotest.check bool "is subset" true got2
+  
+  
+  
+  
+  
+
+  
 let distributors = [
     "Chash", `Quick, test_chash;
     Alcotest_lwt.test_case "P2C" `Quick test_p2c;
     Alcotest_lwt.test_case "Round Robin" `Quick test_rr; 
   ]
 
+
+
+
+                     
+let utils = [
+    Alcotest_lwt.test_case "Counter Test" `Quick test_counter;
+    Alcotest_lwt.test_case "SyncVar Test" `Quick test_syncvar
+  ]
+
+
+
+let serversets =
+
+  [
+    Alcotest_lwt.test_case "RRQueue" `Quick (test_serverset (module RRQueue) );
+
+    Alcotest_lwt.test_case "LoadedNodes" `Quick (test_serverset (module LoadedNodes) );
+
+    Alcotest_lwt.test_case "Nodes" `Quick (test_serverset (module Nodes) )
+  ]
+                
+
 let () =
+
+
   Alcotest.run "Testing Balancer" [
-    "Testing Load Distributors", distributors;
+      "Distributor Suite", distributors;
+      "Synchronization Util Suite", utils;
+      "Server Sets Suite", serversets
   ]

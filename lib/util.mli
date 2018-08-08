@@ -32,8 +32,8 @@ end
 (** Builds Atomic Counters from Integers*)                        
 module Counter (I: INT): COUNTER
 
-module Counter32: COUNTER with type elt = int32
-module Counter64: COUNTER with type elt = int64
+module Counter32: COUNTER with type elt = int32 and type t = int32 ref 
+module Counter64: COUNTER with type elt = int64 and type t = int64 ref
 
 
                                             

@@ -46,6 +46,8 @@ module type S = sig
   val add_node: t -> Node.t -> elt Lwt.t 
   val rm_node: t -> Node.t -> elt Lwt.t
 
+  val nodes: t -> Node.t list Lwt.t
+                       
                                  
 end
 
@@ -54,6 +56,7 @@ end
 
 
 module LoadedNodes  = struct
+  open LoadedNode
   type elt = LoadedSet.t 
       
   type t = LoadedSet.t SyncVar.t
@@ -96,13 +99,16 @@ module LoadedNodes  = struct
 
       
  
-  let add t node =
+  let add_node t node =
     let ln = LoadedNode.of_node node in
     SyncVar.update t (LoadedSet.add ln)
 
-  let rm t node =
+  let rm_node t node =
     let ln = LoadedNode.of_node node in
     SyncVar.update t (LoadedSet.remove ln)
+
+  let nodes t =
+    SyncVar.read t >|= fun e -> LoadedSet.elements e |> List.map (fun x -> x.node)
 
 end
 
@@ -116,7 +122,7 @@ module Nodes = struct
   let from_nodes l = NodeSet.of_list l |> SyncVar.create 
 
   let update t x =
-    SyncVar.become t x >|= fun () -> t 
+    SyncVar.become t x >|= fun () -> x
 
   let from_src t src =
     let e = React.S.changes src in
@@ -130,6 +136,9 @@ module Nodes = struct
 
   let rm_node t node =
     SyncVar.update t (NodeSet.remove node)
+
+  let nodes t =
+    SyncVar.read t >|= fun e -> NodeSet.elements e
     
 end
 
@@ -202,11 +211,16 @@ module RRQueue = struct
                 
 
   let add_node t node =
-    sync t (fun () ->
+    let f () = sync t (fun () ->
         let v = t.value in
         v.nodes <- NodeSet.add node t.value.nodes;
+        Queue.add node v.queue; 
         Lwt.return v                      
-    )
+    ) in
+
+    if (NodeSet.mem node t.value.nodes <> true) then f ()
+    else Lwt.return t.value
+                    
 
 
   let rm_node t node =
@@ -216,6 +230,10 @@ module RRQueue = struct
         Lwt.return v                      
     )
 
+
+  let nodes t  =
+    SyncVar.read t >|= fun e ->
+    NodeSet.elements e.nodes
 end
 
                   

@@ -100,14 +100,24 @@ module SyncVar = struct
     let lock = Lwt_mutex.create () in
     {lock; value}
                 
-  let rec read t =
-    let pred = Lwt_mutex.is_locked t.lock in
+  let read t =
 
-    if pred = false then
-      Lwt.return t.value
+    let (p, waker) = Lwt.wait () in 
 
-    else
-      read t
+    let rec aux () =
+      let pred =
+        Lwt_mutex.is_locked t.lock = false
+      in
+
+      if pred then
+        Lwt.wakeup waker t.value 
+      else
+        aux ()
+
+          
+    in
+    aux (); 
+    p
 
 
 

@@ -5,12 +5,7 @@ PKG bytes
 PKG cstruct
 PKG fmt
 PKG hex
-PKG logs
 PKG lwt
-PKG mirage-clock
-PKG mirage-device
-PKG mirage-flow
-PKG mirage-flow-lwt
 PKG react
 PKG result
 PKG sexplib
