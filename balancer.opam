@@ -5,6 +5,7 @@ tags: ["networking" "load balancing" "scalability"]
 license: "MIT"
 homepage: "https://github.com/xnukernpoll/ocaml-balancers"
 dev-repo: "https://github.com/xnukernpoll/ocaml-balancers.git"
+bug-reports: "https://github.com/xnukernpoll/ocaml-balancers/issues"
 
 build: [
   [ "jbuilder" "subst" ] {pinned}

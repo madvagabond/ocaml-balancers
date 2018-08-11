@@ -12,19 +12,20 @@ module type COUNTER = sig
   type elt
   type t = elt ref
 
-
   val zero: unit -> t
   val create: elt -> t
+                     
 
-                      
+  val cas: t -> elt -> elt -> bool 
   val incr: t -> elt
   val decr: t -> elt
 
   val get: t -> elt
-  val set: t -> elt -> elt 
+  val set: t -> elt -> elt
+  val bounded_incr: t -> elt -> elt
+                                  
 end
-                    
-                    
+                        
 module Counter (I: INT) = struct
   type elt = I.t
   type t = elt ref
@@ -82,7 +83,25 @@ module Counter (I: INT) = struct
     let p = cas t old n in
 
     if p = true then n
-    else set t n 
+    else set t n
+
+  let rec bounded_incr t max =
+    let old = !t in
+
+    if !t >= max then
+      let n = I.zero in 
+      let b = cas t old n in
+
+      if b = true then n 
+      else bounded_incr t max 
+
+    else
+      let n = I.succ old in
+      let b = cas t old n in
+
+      if b = true then n
+      else bounded_incr t max
+                  
       
     
 end 

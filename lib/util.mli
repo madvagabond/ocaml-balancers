@@ -21,12 +21,15 @@ module type COUNTER = sig
   val zero: unit -> t
   val create: elt -> t
                      
-         
+
+  val cas: t -> elt -> elt -> bool 
   val incr: t -> elt
   val decr: t -> elt
 
   val get: t -> elt
-  val set: t -> elt -> elt 
+  val set: t -> elt -> elt
+  val bounded_incr: t -> elt -> elt
+                                  
 end
 
 (** Builds Atomic Counters from Integers*)                        

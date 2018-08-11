@@ -62,3 +62,6 @@ let compare l r =
 
     
   
+let eq l r =
+  if (compare l r) = 0 then true
+  else false

@@ -16,3 +16,4 @@ val make: ?id: Cstruct.t -> host: string -> port: int -> unit -> t
 
                                                             
 val compare: t -> t -> int
+val eq: t -> t -> bool

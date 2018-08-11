@@ -95,18 +95,12 @@ module RoundRobin = struct
                 
 
   let pick state () =
-    RRQueue.take state 
+    RRQueue.take state
 
-
-                               
+                             
   let use state () f =
     pick state () >>= fun node ->
-
-    Util.ensure (f node) (fun () ->
-      RRQueue.add state node;
-      ()
-    )
-    
+    f node 
 
     
                   

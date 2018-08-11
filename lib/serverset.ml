@@ -144,96 +144,73 @@ end
 
 
 
+module ListExt = struct
+
+  
+
+
+  let diff eq l r =
+    let pred x = List.exists(fun e -> eq e x) r <> true in
+    List.filter pred l
+
+  let add_unique eq l r =
+    let to_add = diff eq r l in
+    l @ r
+
+          
+end
+
 
 
                  
 
 module RRQueue = struct
 
-  type elt = {queue: Node.t Queue.t; mutable nodes: NodeSet.t}
+  type elt = {nodes: Node.t list; counter: Counter32.t}
   type t = elt SyncVar.t
 
-  open SyncVar
-         
 
-
-  (*
-  let get_nodes t = read t |> (fun x -> x.nodes)
-  let get_queue t = read t |> (fun x -> x.queue) 
-              
-  *)              
-  let of_nodes hosts =
-
-    let nodes = NodeSet.of_list hosts in 
-    let queue = Queue.create () in
-    
-    List.iter (fun x -> Queue.add x queue) hosts;
-    SyncVar.create {queue; nodes}
-
-                   
   let take t =
-    SyncVar.sync t (fun () ->
-        let q = t.value.queue in 
-        Queue.take q |> Lwt.return
+    SyncVar.read t >|= fun v ->
+
+    let nodes = v.nodes in 
+    let max = List.length nodes - 1 |> Int32.of_int in 
+    let pos = Counter32.bounded_incr v.counter max in
+    List.nth nodes (Int32.to_int pos) 
+
+            
+              
+  
+  let of_nodes nodes =
+    SyncVar.create {nodes; counter= Counter32.zero ()}
+                   
+
+
+
+  let add_node t node =
+    SyncVar.update t (fun v ->
+        let nodes = ListExt.add_unique Node.eq v.nodes [node] in
+        {v with nodes}
       )
-    
 
-  let add t n =
-    SyncVar.sync t (fun () ->
+  let rm_node t node =
+    SyncVar.update t (fun v ->
 
-        let (nodes, q) =
-          let s = SyncVar.value t in
-          s.nodes, s.queue
-        in
-        
-        
-        if (NodeSet.mem n nodes) then 
-          Queue.add n q |> Lwt.return
+        let nodes = ListExt.diff Node.eq v.nodes [node] in
+        {v with nodes}
+      ) 
 
-        else
-          Lwt.return_unit 
-      )
-
-                 
   let update t x =
+    SyncVar.update t (fun v -> {v with nodes = (NodeSet.elements x) }   )
 
-    sync t (
-        fun () ->
-        t.value.nodes <- x;
-        Lwt.return t.value
-      )
-
-         
   let from_src t src =
     let e = React.S.changes src in    
     React.E.map (update t) e;
     t
-                
-
-  let add_node t node =
-    let f () = sync t (fun () ->
-        let v = t.value in
-        v.nodes <- NodeSet.add node t.value.nodes;
-        Queue.add node v.queue; 
-        Lwt.return v                      
-    ) in
-
-    if (NodeSet.mem node t.value.nodes <> true) then f ()
-    else Lwt.return t.value
-                    
 
 
-  let rm_node t node =
-    sync t (fun () ->
-        let v = t.value in
-        v.nodes <- NodeSet.remove node t.value.nodes;
-        Lwt.return v                      
-    )
-
-
-  let nodes t  =
-    SyncVar.read t >|= fun e ->
-    NodeSet.elements e.nodes
+  let nodes t =
+    SyncVar.read t >|= fun v -> v.nodes 
 end
 
                   
