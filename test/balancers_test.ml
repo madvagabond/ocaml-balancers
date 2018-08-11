@@ -4,6 +4,8 @@ open Lwt.Infix
 
 open Serverset
 open Util
+
+
        
 module CH = Chash
               
@@ -55,6 +57,8 @@ let random_host_port () =
   host, port 
 
 
+let random_range min max =
+  min + ( Random.int (max - min) )
           
 let random_node () =
   let (host, port) = random_host_port () in
@@ -78,6 +82,46 @@ let make_nodes n =
         
                 
 
+
+
+
+
+
+let test_counter s () =
+  let ctr = Counter64.zero () in
+  let l = [1; 2; 3; 4;] in
+  
+  let expected = 4L in
+  
+  Lwt_list.iter_p (fun _ ->
+      Util.Counter64.incr ctr;
+      Lwt.return_unit
+    ) l >>= fun () ->
+
+  let got = Counter64.get ctr in
+
+  Alcotest.check Alcotest.int64 "counter is atomic" expected got;
+  
+    
+
+  let ctr1 = Counter64.create 5L in
+  let exp = 4L in
+
+  let rng = range 0 5 in
+
+  Lwt_list.iter_p (fun _ ->
+      Counter64.bounded_incr ctr1 5L;
+      Lwt.return_unit
+    ) rng >|= fun () ->
+
+  let got1 = Counter64.get ctr in
+  Alcotest.check Alcotest.int64 "counter is 4" got1 exp
+
+
+
+
+       
+      
                       
 let test_p2c switch () =
   use_switch switch;
@@ -86,7 +130,7 @@ let test_p2c switch () =
   
   let srv =  LoadedNodes.of_list [v1; v2] in 
   Distributor.P2C.pick srv () >|= fun got -> 
-  (Alcotest.check loaded_node) "node is uneqal" v1 got 
+  (Alcotest.check loaded_node) "node is uneqal" v1 got
 
 
 
@@ -114,55 +158,39 @@ let test_rr switch () =
 
   let ss = RRQueue.of_nodes peers in 
   RoundRobin.pick ss () >>= fun got -> 
-  Alcotest.check node "Nodes didn't match" expected got;
+  Alcotest.check node "Starts with head" expected got;
 
   let expect_n = List.nth peers 1 in
 
-  RoundRobin.pick ss () >|= fun got -> 
+  RoundRobin.pick ss () >>= fun got0 -> 
   
-  Alcotest.check node "Doesn't exibit FIFO properties" expect_n got
+  Alcotest.check node "Exibits FIFO properties" expect_n got0;
 
+  let ss_a = RRQueue.of_nodes peers in
 
+  let threads = random_range 10 20 in
 
-                
-
-let test_counter s () =
-  let ctr = Util.Counter64.zero () in
-  let l = [1; 2; 3; 4;] in
+  let pos =
+    let p = (threads mod 5) - 1 in
+    if p > 0 then p
+    else 0
+  in 
+                    
   
-  let expected = 4L in
   
   Lwt_list.iter_p (fun _ ->
-      Util.Counter64.incr ctr;
-      Lwt.return_unit
-    ) l >>= fun () ->
+      RoundRobin.pick ss_a () >|= fun _ ->
+      ()
+    ) (range 1 threads) >>= fun () ->
 
-  let got = Counter64.get ctr in
+  let e = List.nth peers pos in
+  RoundRobin.pick ss_a () >|= fun g ->
+  Alcotest.check node "Maintains fifo under parallel use" e g
 
-  Alcotest.check
-    Alcotest.int64
-    "counter isn't equal to expected result"
-    expected
-    got
-  |> Lwt.return
+                 
 
 
-
-
-
-let timeout delay t =
-  let tmout =
-    Lwt_unix.sleep delay >|= fun () ->
-    print_endline "triggered"
-  in
-
-  Lwt.pick [
-      (tmout >|= fun () -> true);
-      (t >|= fun v -> false);
-    ]
-
-
-           
+                 
 let test_syncvar s () =
   let open SyncVar in
 
@@ -191,13 +219,13 @@ let test_syncvar s () =
   become var exp >>= fun () ->
   read var >|= fun got1 -> 
   
-  Alcotest.check Alcotest.string "State change wasn't seen" exp got1           
-           
-open Serverset
-open Alcotest
-       
+  Alcotest.check Alcotest.string "State change wasn't seen" exp got1      
+
+
        
 let test_serverset (type a) (module SS: Serverset.S with type elt = a) s () =
+  let open Alcotest in 
+  
   let t =
     range 3000 3005 |> List.map (fun x -> make_node x) |> SS.of_nodes
   in
@@ -232,7 +260,8 @@ let test_serverset (type a) (module SS: Serverset.S with type elt = a) s () =
   Alcotest.check bool "sets are equal" true got2
   
   
-  
+
+                 
   
   
 

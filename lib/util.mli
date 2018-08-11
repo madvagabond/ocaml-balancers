@@ -28,7 +28,7 @@ module type COUNTER = sig
 
   val get: t -> elt
   val set: t -> elt -> elt
-  val bounded_incr: t -> elt -> elt
+  val bounded_incr: t -> elt -> elt                         
                                   
 end
 

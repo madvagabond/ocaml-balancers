@@ -174,8 +174,11 @@ module RRQueue = struct
     SyncVar.read t >|= fun v ->
 
     let nodes = v.nodes in 
-    let max = List.length nodes - 1 |> Int32.of_int in 
-    let pos = Counter32.bounded_incr v.counter max in
+    let max = List.length nodes - 1 |> Int32.of_int in
+
+    let pos = Counter32.get v.counter in
+    Counter32.bounded_incr v.counter max; 
+
     List.nth nodes (Int32.to_int pos) 
 
             
